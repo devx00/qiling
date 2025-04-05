@@ -317,7 +317,7 @@ def ql_syscall_brk(ql: Qiling, inp: int):
             try:
                 ql.mem.map(cur_brk_addr, new_brk_addr - cur_brk_addr, info="[brk]")
             except QlMemoryMappedError:
-                ql.log.debug(f'{ql.os.name}: out of memory')
+                ql.log.debug('brk: out of memory')
                 return ql.loader.brk_address
 
         elif new_brk_addr < cur_brk_addr:
