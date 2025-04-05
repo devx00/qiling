@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, IO, Iterator, Optional, Union
 
 from qiling import Qiling
 from qiling.const import QL_ARCH, QL_OS
+from qiling.exception import QlMemoryMappedError
 from qiling.os.posix.filestruct import ql_pipe
 from qiling.os.posix.const import *
 from qiling.core_hooks import QlCoreHooks
@@ -313,7 +314,11 @@ def ql_syscall_brk(ql: Qiling, inp: int):
 
         if new_brk_addr > cur_brk_addr:
             ql.log.debug(f'brk: increasing program break from {cur_brk_addr:#x} to {new_brk_addr:#x}')
-            ql.mem.map(cur_brk_addr, new_brk_addr - cur_brk_addr, info="[brk]")
+            try:
+                ql.mem.map(cur_brk_addr, new_brk_addr - cur_brk_addr, info="[brk]")
+            except QlMemoryMappedError:
+                ql.log.debug(f'{ql.os.name}: out of memory')
+                return ql.loader.brk_address
 
         elif new_brk_addr < cur_brk_addr:
             ql.log.debug(f'brk: decreasing program break from {cur_brk_addr:#x} to {new_brk_addr:#x}')
@@ -877,13 +882,13 @@ def __getdents_common(ql: Qiling, fd: int, dirp: int, count: int, *, is_64: bool
 
     def _type_mapping(ent):
         methods_constants_d = {
-            'is_fifo'         : 0x1,
-            'is_char_device'  : 0x2,
-            'is_dir'          : 0x4,
-            'is_block_device' : 0x6,
-            'is_file'         : 0x8,
-            'is_symlink'      : 0xa,
-            'is_socket'       : 0xc
+            'is_fifo': 0x1,
+            'is_char_device': 0x2,
+            'is_dir': 0x4,
+            'is_block_device': 0x6,
+            'is_file': 0x8,
+            'is_symlink': 0xa,
+            'is_socket': 0xc
         }
 
         ent_p = pathlib.Path(ent.path) if isinstance(ent, os.DirEntry) else ent
@@ -893,7 +898,7 @@ def __getdents_common(ql: Qiling, fd: int, dirp: int, count: int, *, is_64: bool
                 t = constant
                 break
         else:
-            t = 0x0 # DT_UNKNOWN
+            t = 0x0  # DT_UNKNOWN
 
         return bytes([t])
 
@@ -903,7 +908,7 @@ def __getdents_common(ql: Qiling, fd: int, dirp: int, count: int, *, is_64: bool
         results = os.scandir(ql.os.fd[fd].name)
         _ent_count = 0
 
-        for result in itertools.chain((pathlib.Path('.'), pathlib.Path('..')), results): # chain speical directories with the results
+        for result in itertools.chain((pathlib.Path('.'), pathlib.Path('..')), results):  # chain speical directories with the results
             d_ino = result.inode() if isinstance(result, os.DirEntry) else result.stat().st_ino
             d_off = 0
             d_name = (result.name if isinstance(result, os.DirEntry) else result._str).encode() + b'\x00'
@@ -946,7 +951,7 @@ def __getdents_common(ql: Qiling, fd: int, dirp: int, count: int, *, is_64: bool
             _ent_count += 1
 
         regreturn = total_size
-        ql.os.fd[fd].seek(0, os.SEEK_END) # mark as end of file for dir_fd
+        ql.os.fd[fd].seek(0, os.SEEK_END)  # mark as end of file for dir_fd
     else:
         _ent_count = 0
         regreturn = 0
